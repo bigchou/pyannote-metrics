@@ -39,6 +39,7 @@ from .matcher import GreedyMapper
 from .matcher import HungarianMapper
 from .types import Details, MetricComponents
 from .utils import UEMSupportMixin
+from pyannote.core.utils.generators import string_generator
 
 if TYPE_CHECKING:
     pass
@@ -106,6 +107,7 @@ class DiarizationErrorRate(IdentificationErrorRate):
                  **kwargs):
         super().__init__(collar=collar, skip_overlap=skip_overlap, **kwargs)
         self.mapper_ = HungarianMapper()
+        self.known_speaker = kwargs.get('known_speaker', False)
 
     def optimal_mapping(self,
                         reference: Annotation,
@@ -152,13 +154,37 @@ class DiarizationErrorRate(IdentificationErrorRate):
         # might have an impact on the search for the optimal mapping.
 
         # make sure reference only contains string labels ('A', 'B', ...)
-        reference = reference.rename_labels(generator='string')
+        reference_ = reference.rename_labels(generator='string')
 
         # make sure hypothesis only contains integer labels (1, 2, ...)
-        hypothesis = hypothesis.rename_labels(generator='int')
+        hypothesis_ = hypothesis.rename_labels(generator='int')
 
-        # optimal (int --> str) mapping
-        mapping = self.optimal_mapping(reference, hypothesis)
+        if self.known_speaker:
+            generator = string_generator()
+            mapping_in_ref = {label: next(generator) for label in reference.labels()}
+            # rename_labels
+            # https://github.com/pyannote/pyannote-core/blob/develop/pyannote/core/annotation.py#L1227
+
+            # generate mapping
+            mapping_in_hyp = {label: mapping_in_ref[label] for label in hypothesis.labels() if label in mapping_in_ref}
+            
+            renamed = hypothesis.copy()
+            for old_label, new_label in mapping_in_hyp.items():
+                renamed._labelNeedsUpdate[old_label] = True
+                renamed._labelNeedsUpdate[new_label] = True
+            for segment, tracks in hypothesis._tracks.items():
+                new_tracks = {
+                    track: mapping_in_hyp.get(label, label) for track, label in tracks.items()
+                }
+                renamed._tracks[segment] = new_tracks
+            reference = reference_
+            hypothesis = renamed
+            mapping = {}
+        else:
+            reference = reference_
+            hypothesis = hypothesis_
+            # optimal (int --> str) mapping
+            mapping = self.optimal_mapping(reference, hypothesis)
 
         # compute identification error rate based on mapped hypothesis
         # NOTE that collar is set to 0.0 because 'uemify' has already
