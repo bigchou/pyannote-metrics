@@ -394,6 +394,8 @@ class JaccardErrorRate(DiarizationErrorRate):
         super().__init__(
             collar=collar, skip_overlap=skip_overlap, **kwargs)
         self.mapper_ = HungarianMapper()
+        self.known_speaker = kwargs.get('known_speaker', False)
+        self.verbose = False
 
     def compute_components(self,
                            reference: Annotation,
@@ -411,14 +413,24 @@ class JaccardErrorRate(DiarizationErrorRate):
         # NOTE that this 'uemification' must be done here because it
         # might have an impact on the search for the optimal mapping.
 
-        # make sure reference only contains string labels ('A', 'B', ...)
-        reference = reference.rename_labels(generator='string')
-
-        # make sure hypothesis only contains integer labels (1, 2, ...)
-        hypothesis = hypothesis.rename_labels(generator='int')
-
-        # optimal (str --> int) mapping
-        mapping = self.optimal_mapping(hypothesis, reference)
+        if self.verbose:
+            print("self.known_speaker:", self.known_speaker)
+            print("[Before]")
+            print(hypothesis._labelNeedsUpdate)
+            print(reference._labelNeedsUpdate)
+        if self.known_speaker:    
+            mapping = {i:i for i in list( set(reference.labels()) & set(hypothesis.labels()) )}
+        else:
+            # make sure reference only contains string labels ('A', 'B', ...)
+            reference = reference.rename_labels(generator='string')
+            # make sure hypothesis only contains integer labels (1, 2, ...)
+            hypothesis = hypothesis.rename_labels(generator='int')
+            # optimal (str --> int) mapping
+            mapping = self.optimal_mapping(hypothesis, reference)
+        if self.verbose:
+            print("[After]")
+            print(hypothesis._labelNeedsUpdate)
+            print(reference._labelNeedsUpdate)
 
         detail = self.init_components()
 
