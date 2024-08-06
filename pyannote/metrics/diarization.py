@@ -153,43 +153,24 @@ class DiarizationErrorRate(IdentificationErrorRate):
         # NOTE that this 'uemification' must be done here because it
         # might have an impact on the search for the optimal mapping.
 
-        # make sure reference only contains string labels ('A', 'B', ...)
-        reference_ = reference.rename_labels(generator='string')
-
-        # make sure hypothesis only contains integer labels (1, 2, ...)
-        hypothesis_ = hypothesis.rename_labels(generator='int')
-
         if self.known_speaker:
-            generator = string_generator()
-            mapping_in_ref = {label: next(generator) for label in reference.labels()}
-            # rename_labels
-            # https://github.com/pyannote/pyannote-core/blob/develop/pyannote/core/annotation.py#L1227
-
-            # generate mapping
-            mapping_in_hyp = {label: mapping_in_ref[label] for label in hypothesis.labels() if label in mapping_in_ref}
-            
-            renamed = hypothesis.copy()
-            for old_label, new_label in mapping_in_hyp.items():
-                renamed._labelNeedsUpdate[old_label] = True
-                renamed._labelNeedsUpdate[new_label] = True
-            for segment, tracks in hypothesis._tracks.items():
-                new_tracks = {
-                    track: mapping_in_hyp.get(label, label) for track, label in tracks.items()
-                }
-                renamed._tracks[segment] = new_tracks
-            reference = reference_
-            hypothesis = renamed
-            mapping = {}
+            reference = reference.rename_labels({})
+            hypothesis = hypothesis.rename_labels({})
+            mapped = hypothesis.rename_labels({})
         else:
-            reference = reference_
-            hypothesis = hypothesis_
+            # make sure reference only contains string labels ('A', 'B', ...)
+            reference = reference.rename_labels(generator='string')
+
+            # make sure hypothesis only contains integer labels (1, 2, ...)
+            hypothesis = hypothesis.rename_labels(generator='int')
+
             # optimal (int --> str) mapping
             mapping = self.optimal_mapping(reference, hypothesis)
 
-        # compute identification error rate based on mapped hypothesis
-        # NOTE that collar is set to 0.0 because 'uemify' has already
-        # been applied (same reason for setting skip_overlap to False)
-        mapped = hypothesis.rename_labels(mapping=mapping)
+            # compute identification error rate based on mapped hypothesis
+            # NOTE that collar is set to 0.0 because 'uemify' has already
+            # been applied (same reason for setting skip_overlap to False)
+            mapped = hypothesis.rename_labels(mapping=mapping)
         return super(DiarizationErrorRate, self) \
             .compute_components(reference, mapped, uem=uem,
                                 collar=0.0, skip_overlap=False,
